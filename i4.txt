@@ -1,0 +1,4 @@
+Thông số,Giá trị Hex (Địa chỉ),Ý nghĩa
+PackageID,0x6103f93099a9a8998e5407acd744277d574b046c93e2e5ab6c879de569b09e69,Đây là địa chỉ định danh duy nhất của chương trình Document Vault trên Blockchain.
+UpgradeCap,0x2097187252356a075bd8f4167fae62b3bfd3c5c3d9cf36e1f0f22af691d2abfb,Quyền hạn tối cao để ông có thể cập nhật hoặc sửa mã nguồn của hợp đồng này trong tương lai.
+Sender Address,0xabe0d9646ef42e7c95850f1f9d63eabed4487d1709a681ab611b1dcb56b8e1cc,Địa chỉ ví cá nhân đã thực hiện lệnh triển khai này.
