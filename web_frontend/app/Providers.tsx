@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SuiClientProvider, createNetworkConfig } from "@mysten/dapp-kit";
 import { ReactNode, useState } from "react";
 
-// Khai báo tường minh URL của Sui Testnet Fullnode
+// Kết nối với hạ tầng Fullnode của Sui Testnet
 const { networkConfig } = createNetworkConfig({
   testnet: { url: "https://fullnode.testnet.sui.io:443" },
 });
