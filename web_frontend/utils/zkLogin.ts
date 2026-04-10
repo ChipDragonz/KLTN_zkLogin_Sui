@@ -1,5 +1,6 @@
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { generateNonce, generateRandomness } from '@mysten/zklogin';
+import { getExtendedEphemeralPublicKey } from '@mysten/zklogin';
 
 // Hàm chuẩn bị các tham số bảo mật trước khi gọi Google OAuth
 export function prepareZkLogin() {
@@ -25,4 +26,39 @@ export function prepareZkLogin() {
     randomness,
     nonce,
   };
+}
+export async function fetchZkProof(
+  jwt: string,
+  ephemeralPublicKey: any,
+  maxEpoch: number,
+  randomness: string,
+  userSalt: string
+) {
+  console.log("Đang gửi yêu cầu tạo ZKP đến Mysten Prover...");
+
+  // Mysten Labs yêu cầu khóa công khai phải được định dạng theo chuẩn Extended
+  const extendedEphemeralPublicKey = getExtendedEphemeralPublicKey(ephemeralPublicKey);
+
+  const response = await fetch("https://prover-dev.mystenlabs.com/v1", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      jwt: jwt,
+      extendedEphemeralPublicKey: extendedEphemeralPublicKey,
+      maxEpoch: maxEpoch,
+      jwtRandomness: randomness,
+      salt: userSalt,
+      keyClaimName: "sub" // Chỉ định trường định danh của Google là 'sub'
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Lỗi từ Prover: ${err}`);
+  }
+
+  const zkProof = await response.json();
+  return zkProof;
 }

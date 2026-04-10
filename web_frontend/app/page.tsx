@@ -1,5 +1,6 @@
 import styles from "./page.module.css";
-import LoginButton from "../components/LoginButton"; // Import component vừa tạo
+import LoginButton from "../components/LoginButton";
+import AuthHandler from "../components/AuthHandler"; // Thêm dòng này
 
 export default function Home() {
   return (
@@ -12,8 +13,10 @@ export default function Home() {
           Nền tảng lưu trữ và xác thực tài liệu an toàn trên Sui Blockchain
         </p>
         
-        {/* Nhúng nút đăng nhập vào đây */}
         <LoginButton />
+        
+        {/* Bộ xử lý sẽ tàng hình cho đến khi bắt được token */}
+        <AuthHandler />
       </main>
     </div>
   );

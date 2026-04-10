@@ -5,12 +5,13 @@ import { prepareZkLogin } from "../utils/zkLogin";
 export default function LoginButton() {
   const handleLogin = () => {
     // 1. Khởi tạo các tham số bảo mật (Khóa tạm thời, Nonce, v.v.)
-    const { ephemeralKeyPair, maxEpoch, nonce } = prepareZkLogin();
+    const { ephemeralKeyPair, maxEpoch, randomness, nonce } = prepareZkLogin();
 
     // 2. Lưu Khóa bí mật tạm thời và maxEpoch vào sessionStorage
     // Chuyển đổi khóa sang định dạng chuỗi (export) để lưu trữ an toàn
     window.sessionStorage.setItem("zklogin_ephemeral_key", ephemeralKeyPair.getSecretKey());
     window.sessionStorage.setItem("zklogin_max_epoch", maxEpoch.toString());
+    window.sessionStorage.setItem("zklogin_randomness", randomness.toString());
 
     // 3. Lấy Client ID từ biến môi trường
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
