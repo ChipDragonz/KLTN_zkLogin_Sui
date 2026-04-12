@@ -1,6 +1,0 @@
-[package]
-name = "document_vault"
-edition = "2024.beta"
-
-[addresses]
-document_vault = "0x0"
