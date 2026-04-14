@@ -19,7 +19,7 @@ module document_vault::vault {
         owner: address,
         hash_value: String,
     }
-
+    #[allow(lint(public_entry))]
     // 3. Hàm chính để thực thi việc lưu mã băm
     public entry fun store_hash(
         hash_value: String, 
