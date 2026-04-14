@@ -4,11 +4,13 @@
     import Navbar from '$lib/components/Navbar.svelte';
     import PublicScanner from '$lib/components/PublicScanner.svelte';
     import PublisherNode from '$lib/components/PublisherNode.svelte';
+    import HistoryNode from '$lib/components/HistoryNode.svelte';
     import Footer from '$lib/components/Footer.svelte';
 
     let isAuthenticated = $state(false);
     let userAddress = $state('');
     let locale = $state('vi'); 
+    let view = $state('main'); // Điều hướng giữa 'main' và 'history'
 
     onMount(async () => {
         try { await enokiFlow.handleAuthCallback(); } catch (e) {}
@@ -23,18 +25,29 @@
 
 <div class="vibe-bg">
     <div class="retro-grid"></div>
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
+    <div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div>
 </div>
 
-<Navbar bind:isAuthenticated {userAddress} bind:locale />
+<Navbar bind:isAuthenticated {userAddress} bind:locale bind:view />
 
 <main class="vt-main-container">
-    <PublicScanner {locale} />
-    <div style="margin-top: 6rem;">
-        <PublisherNode {isAuthenticated} {userAddress} {locale} />
-    </div>
+    {#if view === 'main'}
+        <div class="fade-in-node">
+            <PublicScanner {locale} />
+            <div style="margin-top: 6rem;">
+                <PublisherNode {isAuthenticated} {userAddress} {locale} />
+            </div>
+        </div>
+    {:else if view === 'history'}
+        <div class="fade-in-node">
+            <HistoryNode 
+                {locale} 
+                {isAuthenticated} 
+                {userAddress} 
+                onViewHome={() => view = 'main'} 
+            />
+        </div>
+    {/if}
 </main>
 
 <Footer {locale} />
@@ -48,13 +61,11 @@
     }
     :global(body) { background: var(--vt-bg-color); color: var(--vt-text-main); font-family: var(--font-main); margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
     .vt-main-container { max-width: 850px; margin: 0 auto; padding: 5rem 1.5rem; flex: 1; width: 100%; box-sizing: border-box; }
-    
+    .fade-in-node { animation: fadeIn 0.4s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .vibe-bg { position: fixed; inset: 0; z-index: -1; background: #050511; }
     .retro-grid { position: absolute; bottom: 0; width: 100%; height: 60vh; background-image: linear-gradient(rgba(255, 0, 128, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 0, 128, 0.08) 1px, transparent 1px); background-size: 40px 40px; transform: perspective(600px) rotateX(60deg); transform-origin: center top; opacity: 0.7; }
-    .blob { position: absolute; filter: blur(120px); opacity: 0.3; border-radius: 50%; animation: float 25s infinite alternate ease-in-out; }
+    .blob { position: absolute; filter: blur(120px); opacity: 0.3; border-radius: 50%; }
     .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: radial-gradient(circle, #ff007f 0%, transparent 75%); }
     .blob-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: radial-gradient(circle, #3b82f6 0%, transparent 75%); }
-    .blob-3 { top: 30%; right: 30%; width: 30vw; height: 30vw; background: radial-gradient(circle, #7b2cbf 0%, transparent 75%); opacity: 0.15; }
-    
-    @keyframes float { 0% { transform: translate(0,0); } 100% { transform: translate(5%, 10%); } }
 </style>
