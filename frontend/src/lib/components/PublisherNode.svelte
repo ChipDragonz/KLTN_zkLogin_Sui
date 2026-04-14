@@ -20,6 +20,17 @@
         setTimeout(() => { if (notification?.message === message) notification = null; }, 6000);
     }
 
+    // Hàm đăng nhập Google (dùng cho link gắn kèm phía dưới)
+    async function loginWithGoogle() {
+        const url = await enokiFlow.createAuthorizationURL({
+            provider: 'google',
+            clientId: env.PUBLIC_GOOGLE_CLIENT_ID,
+            redirectUrl: `${window.location.protocol}//${window.location.host}`, 
+            network: 'testnet'
+        });
+        window.location.href = url;
+    }
+
     function handleFileUpload(event: Event) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file) return;
@@ -68,18 +79,24 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ txbBytes: txbBase64, sender: userAddress }) 
             });
+            
             const sponsorData = await sponsorRes.json();
-            if (sponsorData.error) throw new Error(`Sponsor Error: ${sponsorData.error}`);
+            
+            if (sponsorData.error) {
+                // LOGIC QUAN TRỌNG: Nếu Enoki báo lỗi 400 (simulation failed) 
+                // thì 99% là do Smart Contract chặn trùng mã băm.
+                if (sponsorData.error.includes('status: 400') || sponsorData.error.includes('MoveAbort')) {
+                    throw new Error('DUPLICATE');
+                }
+                throw new Error(`Sponsor Error: ${sponsorData.error}`);
+            }
 
             const keypair = await enokiFlow.getKeypair({ network: 'testnet' });
             const txBytes = Uint8Array.from(atob(sponsorData.sponsoredTxBytes), c => c.charCodeAt(0));
             
-            // --- ĐOẠN FIX LỖI Ở ĐÂY ---
-            // Kiểm tra nếu signTransactionBlock không tồn tại thì dùng signTransaction
             const signResult = keypair.signTransaction 
                 ? await keypair.signTransaction(txBytes) 
                 : await (keypair as any).signTransactionBlock(txBytes);
-            // --------------------------
 
             const executeRes = await fetch('/api/execute', { 
                 method: 'POST', 
@@ -88,21 +105,19 @@
             });
             const executeData = await executeRes.json();
             
-            if (executeData.error) {
-                if (executeData.error.includes('MoveAbort') || executeData.error.includes('Error checking transaction')) {
-                    throw new Error('DUPLICATE');
-                }
-                throw new Error(executeData.error);
-            }
+            if (executeData.error) throw new Error(executeData.error);
 
             txDigest = executeData.digest;
-            showNotification('success', locale === 'vi' ? "Công chứng tài liệu thành công!" : "Document Notarized!");
+            showNotification('success', locale === 'vi' ? "Xác thực tài liệu thành công!" : "Document Notarized!");
         } catch (e: any) { 
             console.error("FULL ERROR LOG:", e);
             if (e.message === 'DUPLICATE') {
-                showNotification('error', locale === 'vi' ? "Lỗi: Tài liệu này đã tồn tại trên Blockchain!" : "Error: Document already exists!");
+                // ĐỔI NỘI DUNG THÔNG BÁO TẠI ĐÂY
+                showNotification('error', locale === 'vi' 
+                    ? "Cảnh báo: Dấu băm của tài liệu này đã được ghi nhận trên Blockchain trước đó!" 
+                    : "Alert: This document's hash has already been recorded on the Blockchain!");
             } else {
-                showNotification('error', `System Error: ${e.message.slice(0, 60)}`);
+                showNotification('error', `Lỗi: ${e.message.slice(0, 60)}`);
             }
         } finally { 
             isSaving = false; 
@@ -130,7 +145,12 @@
             <div class="lock-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
-            <span>{locale === 'vi' ? 'Publisher Node yêu cầu xác thực. Vui lòng' : 'Publisher Node requires authentication. Please'} <strong>Sign In</strong>.</span>
+            <span>
+                {locale === 'vi' ? 'Hệ thống yêu cầu xác thực. Vui lòng' : 'System requires authentication. Please'} 
+                <button class="inline-auth-btn" onclick={loginWithGoogle}>
+                    {locale === 'vi' ? 'Đăng nhập' : 'Sign In'}
+                </button>.
+            </span>
         </div>
     {:else}
         <section class="vt-publisher-dashboard">
@@ -170,7 +190,7 @@
                                 <div class="spinner"></div> {locale === 'vi' ? 'Đang thực thi...' : 'Processing...'}
                             {:else}
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 6px;"><path d="M20 6L9 17l-5-5"/></svg>
-                                {locale === 'vi' ? 'Đóng dấu lên Blockchain' : 'Sign & Mint on Sui'}
+                                {locale === 'vi' ? 'Công chứng lên Blockchain' : 'Sign & Mint on Sui'}
                             {/if}
                         </span>
                     </button>
@@ -191,10 +211,19 @@
 
 <style>
     .vt-owner-section { max-width: 700px; margin: 0 auto; font-family: 'Inter', system-ui, sans-serif; position: relative; }
+    
+    /* CSS CHO LINK ĐĂNG NHẬP TRONG THÔNG BÁO */
+    .inline-auth-btn {
+        background: none; border: none; padding: 0; margin: 0;
+        color: var(--vt-accent-blue); font-weight: 700; text-decoration: underline;
+        cursor: pointer; font-family: inherit; transition: opacity 0.2s;
+    }
+    .inline-auth-btn:hover { opacity: 0.7; }
+
     .vt-popup { position: fixed; top: 2rem; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; border-radius: 12px; min-width: 350px; backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6); cursor: pointer; animation: slideDown 0.4s ease; }
     .vt-popup.success { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.3); color: #4ade80; }
     .vt-popup.error { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.3); color: #f87171; }
-    .popup-message { font-size: 0.95rem; font-weight: 500; flex: 1; }
+    .popup-message { font-size: 0.9rem; font-weight: 500; flex: 1; line-height: 1.4; }
     @keyframes slideDown { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
     .vt-publisher-dashboard { background: rgba(16, 20, 38, 0.8); border: 1px solid rgba(255,255,255,0.05); padding: 2.5rem; border-radius: 24px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); backdrop-filter: blur(20px); }
     .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1.5rem; }
