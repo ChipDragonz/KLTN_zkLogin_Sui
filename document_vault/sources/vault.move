@@ -5,24 +5,28 @@ module document_vault::vault {
     use sui::transfer;
     use sui::event;
 
-    // 1. Cấu trúc Object lưu trữ bản ghi tài liệu
     struct DocumentRecord has key, store {
         id: UID,
-        owner: address,           // Địa chỉ (zkLogin) của người lưu
-        hash_value: String,       // Mã băm SHA-256 của tài liệu
-        timestamp: u64,           // Thời gian lưu trữ
-    }
-
-    // 2. Định nghĩa Event phát ra khi lưu thành công
-    struct HashStored has copy, drop {
-        record_id: address,
         owner: address,
         hash_value: String,
+        file_name: String,    // MỚI: Tên tệp
+        description: String,  // MỚI: Mô tả ngắn gọn
+        timestamp: u64,
     }
+
+    struct HashStored has copy, drop {
+        record_id: address,
+        hash_value: String,
+        file_name: String,
+        description: String, // THÊM MỚI
+        timestamp: u64,      // THÊM MỚI
+    }
+
     #[allow(lint(public_entry))]
-    // 3. Hàm chính để thực thi việc lưu mã băm
     public entry fun store_hash(
         hash_value: String, 
+        file_name: String,    // MỚI
+        description: String,  // MỚI
         clock: &sui::clock::Clock, 
         ctx: &mut TxContext
     ) {
@@ -30,22 +34,23 @@ module document_vault::vault {
         let id = object::new(ctx);
         let record_id = object::uid_to_address(&id);
 
-        // Tạo một bản ghi mới
         let record = DocumentRecord {
             id,
             owner,
             hash_value,
+            file_name,
+            description,
             timestamp: sui::clock::timestamp_ms(clock),
         };
 
-        // Chuyển quyền sở hữu Object này cho người gửi giao dịch
         transfer::transfer(record, owner);
 
-        // Phát ra sự kiện để Frontend/Backend dễ truy xuất lịch sử
         event::emit(HashStored {
             record_id,
-            owner,
             hash_value,
+            file_name,
+            description, // Truyền mô tả vào sự kiện
+            timestamp: sui::clock::timestamp_ms(clock), // Truyền thời gian vào sự kiện
         });
     }
 }

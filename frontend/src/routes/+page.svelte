@@ -12,14 +12,18 @@
     
     // Biến cho phần LƯU TRỮ
     let fileHash = $state('');
+    let fileName = $state('');      // THÊM MỚI: Tên tài liệu
+    let description = $state('');   // THÊM MỚI: Mô tả
     let isSaving = $state(false);
     let txDigest = $state('');
 
-    // Biến cho phần XÁC THỰC (MỚI)
+    // Biến cho phần XÁC THỰC
     let verifyFileHash = $state('');
     let isVerifying = $state(false);
     let verifyResult = $state<'success' | 'fail' | null>(null);
     let verifyTimestamp = $state('');
+    let verifyFileName = $state(''); // Hiển thị tên khi xác thực thành công
+    let verifyDesc = $state('');     // Hiển thị mô tả khi xác thực thành công
 
     onMount(async () => {
         try { await enokiFlow.handleAuthCallback(); } catch (error) { console.log("No auth callback."); }
@@ -52,6 +56,9 @@
         const file = target.files?.[0];
         if (!file) return;
 
+        // Gợi ý tên file mặc định
+        fileName = file.name;
+
         const reader = new FileReader();
         reader.onload = (e) => {
             const arrayBuffer = e.target?.result as ArrayBuffer;
@@ -66,9 +73,16 @@
         try {
             const suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl('testnet') });
             const tx = new Transaction();
+            
+            // ĐÃ CẬP NHẬT: Đẩy đủ 4 tham số vào Smart Contract
             tx.moveCall({
                 target: `${env.PUBLIC_PACKAGE_ID}::${env.PUBLIC_MODULE_NAME}::${env.PUBLIC_FUNCTION_NAME}`,
-                arguments: [ tx.pure.string(fileHash), tx.object('0x6') ]
+                arguments: [ 
+                    tx.pure.string(fileHash), 
+                    tx.pure.string(fileName),       // Tham số mới
+                    tx.pure.string(description),    // Tham số mới
+                    tx.object('0x6')                // Object đồng hồ hệ thống
+                ]
             });
             tx.setSender(userAddress);
 
@@ -105,14 +119,14 @@
     }
 
     // ==========================================
-    // LOGIC PHẦN 2: XÁC THỰC TÀI LIỆU (GIAI ĐOẠN 5)
+    // LOGIC PHẦN 2: XÁC THỰC TÀI LIỆU
     // ==========================================
     function handleVerifyUpload(event: Event) {
         const target = event.target as HTMLInputElement;
         const file = target.files?.[0];
         if (!file) return;
 
-        verifyResult = null; // Reset kết quả cũ
+        verifyResult = null; 
         const reader = new FileReader();
         reader.onload = (e) => {
             const arrayBuffer = e.target?.result as ArrayBuffer;
@@ -127,23 +141,34 @@
         try {
             const suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl('testnet') });
             
-            // Tìm tất cả các Object thuộc sở hữu của user (Vì hàm contract dùng transfer::transfer cho owner)
-            const objects = await suiClient.getOwnedObjects({
-                owner: userAddress,
-                filter: { StructType: `${env.PUBLIC_PACKAGE_ID}::${env.PUBLIC_MODULE_NAME}::DocumentRecord` },
-                options: { showContent: true }
+            // THAY ĐỔI QUAN TRỌNG: Truy vấn theo Sự kiện (Event) thay vì theo Chủ sở hữu (Owner)
+            const events = await suiClient.queryEvents({
+                query: {
+                    MoveEventType: `${env.PUBLIC_PACKAGE_ID}::${env.PUBLIC_MODULE_NAME}::HashStored`
+                },
+                order: 'descending'
             });
 
-            // Lặp qua dữ liệu trên Blockchain để tìm mã băm khớp
+            // Duyệt qua lịch sử tất cả các lần lưu file của Contract này
             let isFound = false;
-            for (const obj of objects.data) {
-                // Ép kiểu an toàn để lấy data
-                const content = obj.data?.content as any; 
-                if (content?.fields?.hash_value === verifyFileHash) {
+            for (const event of events.data) {
+                const payload = event.parsedJson as any;
+                
+                if (payload?.hash_value === verifyFileHash) {
                     isFound = true;
-                    // Lấy thời gian lưu trữ (chuyển từ timestamp Unix sang giờ Việt Nam)
-                    const date = new Date(Number(content.fields.timestamp));
-                    verifyTimestamp = date.toLocaleString('vi-VN');
+                    
+                    // Lấy chính xác thông tin từ Sự kiện (Dành cho Khách)
+                    verifyFileName = payload.file_name || 'Không có tên';
+                    verifyDesc = payload.description || 'Không có mô tả';
+                    
+                    // Lấy và format chính xác Timestamp từ Sự kiện
+                    if (payload.timestamp) {
+                        const date = new Date(Number(payload.timestamp));
+                        verifyTimestamp = date.toLocaleString('vi-VN');
+                    } else {
+                        verifyTimestamp = 'Không rõ thời gian';
+                    }
+                    
                     break;
                 }
             }
@@ -151,8 +176,8 @@
             verifyResult = isFound ? 'success' : 'fail';
 
         } catch (error) {
-            console.error("Lỗi đọc blockchain:", error);
-            alert("Lỗi khi kết nối mạng lưới Sui");
+            console.error("Lỗi truy vấn công khai:", error);
+            alert("Không thể kết nối mạng lưới Sui để kiểm tra công khai.");
         } finally {
             isVerifying = false;
         }
@@ -187,11 +212,19 @@
             <input type="file" onchange={handleFileUpload} style="margin-bottom: 1rem;" disabled={isSaving} />
             
             {#if fileHash}
+                <div style="margin-top: 10px; padding: 1rem; background: #f1f8ff; border-radius: 4px; border: 1px solid #cce5ff;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 5px;">Tên tài liệu hiển thị:</label>
+                    <input type="text" bind:value={fileName} placeholder="VD: Hợp đồng kinh tế" style="width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" />
+                    
+                    <label style="display: block; font-weight: bold; margin-bottom: 5px;">Mô tả / Ghi chú chi tiết:</label>
+                    <textarea bind:value={description} placeholder="Ghi chú thêm về bản hợp đồng này..." style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; min-height: 80px;"></textarea>
+                </div>
+
                 <div style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
-                    <p style="margin: 0 0 5px 0; font-size: 0.9em;">Mã băm SHA-256:</p>
+                    <p style="margin: 0 0 5px 0; font-size: 0.9em;">Mã băm SHA-256 (Mã này không thể làm giả):</p>
                     <code style="word-break: break-all; color: #333;">{fileHash}</code>
                     
-                    <button onclick={handleSaveToBlockchain} disabled={isSaving} style="display: block; margin-top: 1.5rem; padding: 10px; background: {isSaving ? '#ccc' : '#007bff'}; color: white; cursor: {isSaving ? 'not-allowed' : 'pointer'}; border: none; border-radius: 4px; width: 100%; font-weight: bold;">
+                    <button onclick={handleSaveToBlockchain} disabled={isSaving || !fileName} style="display: block; margin-top: 1.5rem; padding: 12px; background: {isSaving || !fileName ? '#ccc' : '#007bff'}; color: white; cursor: {isSaving || !fileName ? 'not-allowed' : 'pointer'}; border: none; border-radius: 4px; width: 100%; font-weight: bold; font-size: 16px;">
                         {isSaving ? 'Đang thực thi giao dịch...' : 'Lưu bản quyền lên Blockchain'}
                     </button>
 
@@ -221,10 +254,12 @@
                     </button>
 
                     {#if verifyResult === 'success'}
-                        <div style="margin-top: 1rem; padding: 15px; background: #e8f5e9; border: 2px solid #4caf50; border-radius: 4px; text-align: center;">
-                            <h3 style="color: #2e7d32; margin: 0 0 10px 0;">✅ TÀI LIỆU HỢP LỆ</h3>
-                            <p style="margin: 0; font-size: 0.95em;">Tính nguyên vẹn được đảm bảo 100%.</p>
-                            <p style="margin: 5px 0 0 0; font-size: 0.85em; color: #666;">Thời gian lưu trữ bản gốc: {verifyTimestamp}</p>
+                        <div style="margin-top: 1rem; padding: 15px; background: #e8f5e9; border: 2px solid #4caf50; border-radius: 4px; text-align: left;">
+                            <h3 style="color: #2e7d32; margin: 0 0 10px 0; text-align: center;">✅ TÀI LIỆU HỢP LỆ</h3>
+                            <p style="margin: 0 0 8px 0; font-size: 0.95em;"><strong>Tên tài liệu:</strong> {verifyFileName}</p>
+                            <p style="margin: 0 0 8px 0; font-size: 0.95em;"><strong>Ghi chú:</strong> {verifyDesc}</p>
+                            <hr style="border: 0; border-top: 1px solid #c8e6c9; margin: 10px 0;">
+                            <p style="margin: 0; font-size: 0.85em; color: #666;"><strong>Thời gian lưu bản gốc:</strong> {verifyTimestamp}</p>
                         </div>
                     {:else if verifyResult === 'fail'}
                         <div style="margin-top: 1rem; padding: 15px; background: #ffebee; border: 2px solid #f44336; border-radius: 4px; text-align: center;">
