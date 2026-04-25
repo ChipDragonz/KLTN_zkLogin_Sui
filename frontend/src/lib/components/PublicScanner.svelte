@@ -85,6 +85,7 @@
                             <p>{locale === 'vi' ? 'Không phát hiện chỉnh sửa. Tài liệu khớp hoàn toàn với bản ghi gốc.' : 'No modifications detected. Document matches the original on-chain record.'}</p>
                             <div class="vt-meta-grid">
                                 <div class="vt-meta-item"><span>{locale === 'vi' ? 'Tên:' : 'Name:'}</span> {verifyFileName}</div>
+                                <div class="vt-meta-item"><span>{locale === 'vi' ? 'Chú thích:' : 'Description:'}</span> {verifyDesc}</div>
                                 <div class="vt-meta-item"><span>{locale === 'vi' ? 'Thời gian:' : 'Timestamp:'}</span> {verifyTimestamp}</div>
                             </div>
                         </div>
