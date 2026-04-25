@@ -5,44 +5,76 @@
 
     let { locale } = $props();
 
-    let verifyFileHash = $state('');
-    let isVerifying = $state(false);
-    let verifyResult = $state<'success' | 'fail' | null>(null);
+    // =========================================================================
+    // TRẠNG THÁI (STATE VARIABLES)
+    // Các biến lưu trữ dữ liệu trong quá trình xác thực tài liệu
+    // =========================================================================
+    let verifyFileHash = $state(''); // Lưu trữ mã băm SHA-256 của tệp người dùng tải lên
+    let isVerifying = $state(false); // Trạng thái đang tải (hiệu ứng spinner)
+    let verifyResult = $state<'success' | 'fail' | null>(null); // Kết quả đối chiếu với Blockchain
+    
+    // Dữ liệu lấy về từ Blockchain nếu tài liệu hợp lệ
     let verifyTimestamp = $state('');
     let verifyFileName = $state(''); 
     let verifyDesc = $state('');     
 
-    function handleVerifyUpload(event: Event) {
+    // =========================================================================
+    // CÁC HÀM XỬ LÝ CHÍNH (MAIN FUNCTIONS)
+    // =========================================================================
+
+    /**
+     * Hàm xử lý khi người dùng chọn một tệp tin (File Upload)
+     * Đọc nội dung tệp dưới dạng ArrayBuffer và tính toán mã băm SHA-256 ngay trên trình duyệt (Client-side)
+     */
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file) return;
         verifyResult = null; 
         const reader = new FileReader();
-        reader.onload = (e) => { verifyFileHash = sha256(e.target?.result as ArrayBuffer); };
+        // Callback được gọi khi tệp được đọc xong
+        reader.onload = (e) => { 
+            // Tính toán băm SHA-256 từ nội dung tệp tin
+            verifyFileHash = sha256(e.target?.result as ArrayBuffer); 
+        };
         reader.readAsArrayBuffer(file);
     }
 
+    /**
+     * Hàm xác thực dữ liệu trên Sui Blockchain
+     * Truy vấn các sự kiện (Events) của Smart Contract để kiểm tra xem mã băm có tồn tại không.
+     */
     async function verifyOnBlockchain() {
         isVerifying = true;
         verifyResult = null;
         try {
+            // Khởi tạo kết nối tới node của mạng lưới Sui Testnet
             const suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl('testnet') });
+            
+            // Lấy lịch sử sự kiện `HashStored` từ Smart Contract đã triển khai
             const events = await suiClient.queryEvents({
                 query: { MoveEventType: `${env.PUBLIC_PACKAGE_ID}::${env.PUBLIC_MODULE_NAME}::HashStored` }, order: 'descending'
             });
 
             let isFound = false;
+            // Lặp qua các sự kiện lấy được để tìm mã băm tương ứng
             for (const event of events.data) {
                 const payload = event.parsedJson as any;
+                // Nếu tìm thấy mã băm trong lịch sử sự kiện (Event History)
                 if (payload?.hash_value === verifyFileHash) {
                     isFound = true;
+                    // Lấy các thông tin (metadata) đã được ghi nhận trên chuỗi khối
                     verifyFileName = payload.file_name || 'No Name';
                     verifyDesc = payload.description || 'No Description';
                     verifyTimestamp = payload.timestamp ? new Date(Number(payload.timestamp)).toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US') : 'Unknown';
                     break;
                 }
             }
+            // Cập nhật kết quả dựa trên việc tìm kiếm
             verifyResult = isFound ? 'success' : 'fail';
-        } catch (error) { alert("Blockchain connection error"); } finally { isVerifying = false; }
+        } catch (error) { 
+            alert("Lỗi kết nối Blockchain / Blockchain connection error"); 
+        } finally { 
+            isVerifying = false; 
+        }
     }
 </script>
 

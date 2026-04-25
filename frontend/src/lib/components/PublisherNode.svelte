@@ -5,13 +5,17 @@
     import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc';
     import { enokiFlow } from '$lib/enoki';
 
+    // Biến nhận từ component cha (Layout / Page)
     let { isAuthenticated, userAddress, locale } = $props();
 
-    let fileHash = $state('');
-    let fileName = $state('');
-    let description = $state('');
-    let isSaving = $state(false);
-    let txDigest = $state('');
+    // =========================================================================
+    // TRẠNG THÁI DỮ LIỆU CỦA FORM (FORM STATE)
+    // =========================================================================
+    let fileHash = $state('');      // Lưu mã băm tài liệu
+    let fileName = $state('');      // Lưu tên hiển thị của tài liệu
+    let description = $state('');   // Lưu mô tả tài liệu
+    let isSaving = $state(false);   // Cờ theo dõi trạng thái gửi giao dịch
+    let txDigest = $state('');      // Lưu mã băm của giao dịch (Transaction Digest) sau khi thành công
 
     let notification = $state<{ type: 'error' | 'success', message: string } | null>(null);
 
@@ -20,7 +24,14 @@
         setTimeout(() => { if (notification?.message === message) notification = null; }, 6000);
     }
 
-    // Hàm đăng nhập Google (dùng cho link gắn kèm phía dưới)
+    // =========================================================================
+    // CÁC HÀM XỬ LÝ (EVENT HANDLERS)
+    // =========================================================================
+
+    /**
+     * Hàm đăng nhập bằng Google zkLogin thông qua hệ thống Enoki.
+     * Xác thực danh tính của người dùng mà không cần tạo hay quản lý Private Key truyền thống.
+     */
     async function loginWithGoogle() {
         const url = await enokiFlow.createAuthorizationURL({
             provider: 'google',
@@ -31,6 +42,10 @@
         window.location.href = url;
     }
 
+    /**
+     * Hàm xử lý tải tệp và tạo mã băm SHA-256 ngay trên Client.
+     * Tài liệu người dùng không bao giờ được gửi lên Server, đảm bảo tính bảo mật.
+     */
     function handleFileUpload(event: Event) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file) return;
@@ -48,6 +63,10 @@
         reader.readAsArrayBuffer(file);
     }
 
+    /**
+     * Hàm quan trọng: Giao tiếp với Smart Contract thông qua Gas Sponsoring (Enoki Sponsor API).
+     * Tạo một giao dịch Move (Transaction) để gọi hàm `store_hash` trong Smart Contract.
+     */
     async function handleSaveToBlockchain() {
         if (!env.PUBLIC_REGISTRY_ID) {
             showNotification('error', "Thiếu PUBLIC_REGISTRY_ID trong file .env!");
@@ -57,23 +76,30 @@
         isSaving = true;
         try {
             const suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl('testnet') });
+            
+            // 1. KHỞI TẠO KHỐI GIAO DỊCH (Transaction Block)
             const tx = new Transaction();
             
+            // Gọi hàm store_hash của Smart Contract
             tx.moveCall({
                 target: `${env.PUBLIC_PACKAGE_ID}::vault::store_hash`,
                 arguments: [ 
-                    tx.object(env.PUBLIC_REGISTRY_ID), 
-                    tx.pure.string(fileHash),          
-                    tx.pure.string(fileName),          
-                    tx.pure.string(description),       
-                    tx.object('0x6')                   
+                    tx.object(env.PUBLIC_REGISTRY_ID), // Object Sổ đăng ký chung
+                    tx.pure.string(fileHash),          // Tham số mã băm
+                    tx.pure.string(fileName),          // Tham số tên tệp
+                    tx.pure.string(description),       // Tham số mô tả
+                    tx.object('0x6')                   // Đồng hồ hệ thống (System Clock)
                 ]
             });
 
-            tx.setSender(userAddress);
+            tx.setSender(userAddress); // Đặt địa chỉ người gửi bằng địa chỉ zkLogin
+            
+            // 2. BIÊN DỊCH GIAO DỊCH VÀ CHUẨN BỊ TÀI TRỢ GAS (SPONSORING)
+            // Lấy bytes của giao dịch để gửi cho backend Enoki Sponsor
             const txbBytes = await tx.build({ client: suiClient, onlyTransactionKind: true });
             const txbBase64 = btoa(txbBytes.reduce((data, byte) => data + String.fromCharCode(byte), ''));
 
+            // Gửi yêu cầu tài trợ phí Gas (Sponsor) cho mạng lưới thông qua Backend API
             const sponsorRes = await fetch('/api/sponsor', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
@@ -91,13 +117,16 @@
                 throw new Error(`Sponsor Error: ${sponsorData.error}`);
             }
 
+            // 3. KÝ GIAO DỊCH BẰNG ZK-LOGIN KEYPAIR (SIGNING)
             const keypair = await enokiFlow.getKeypair({ network: 'testnet' });
             const txBytes = Uint8Array.from(atob(sponsorData.sponsoredTxBytes), c => c.charCodeAt(0));
             
+            // Ký số giao dịch bằng Ephemeral Keypair được tạo từ Enoki
             const signResult = keypair.signTransaction 
                 ? await keypair.signTransaction(txBytes) 
                 : await (keypair as any).signTransactionBlock(txBytes);
 
+            // 4. THỰC THI GIAO DỊCH TRÊN BLOCKCHAIN (EXECUTION)
             const executeRes = await fetch('/api/execute', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
@@ -117,7 +146,7 @@
                     ? "Cảnh báo: Dấu băm của tài liệu này đã được ghi nhận trên Blockchain trước đó!" 
                     : "Alert: This document's hash has already been recorded on the Blockchain!");
             } else {
-                showNotification('error', `Lỗi: ${e.message.slice(0, 60)}`);
+                showNotification('error', `Lỗi / Error: ${e.message.slice(0, 60)}`);
             }
         } finally { 
             isSaving = false; 
