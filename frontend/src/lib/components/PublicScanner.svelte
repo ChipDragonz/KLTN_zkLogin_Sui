@@ -26,6 +26,7 @@
      * Hàm xử lý khi người dùng chọn một tệp tin (File Upload)
      * Đọc nội dung tệp dưới dạng ArrayBuffer và tính toán mã băm SHA-256 ngay trên trình duyệt (Client-side)
      */
+    function handleVerifyUpload(event: Event) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (!file) return;
         verifyResult = null; 
