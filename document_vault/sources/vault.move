@@ -28,6 +28,7 @@ module document_vault::vault {
     /// Bản ghi tài liệu (DocumentRecord)
     /// Một Object thuộc sở hữu của người dùng (Owned Object).
     /// Đại diện cho bằng chứng công chứng tài liệu của họ.
+    struct DocumentRecord has key {
         id: UID,
         owner: address,
         hash_value: String,
